@@ -163,3 +163,29 @@ func TestSet2_15(t *testing.T) {
 		fmt.Printf("Good padding : %s\n", unpadded3)
 	}
 }
+
+func TestSet2_16(t *testing.T) {
+	prefix := "comment1=cooking%20MCs;userdata="
+	suffix := ";comment2=%20like%20a%20pound%20of%20bacon"
+	key := generateRandom(16)
+	iv := generateRandom(16)
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		panic(err)
+	}
+	encrypted := concatAndEncrypt(prefix, "AAA;admin=true", suffix, block, iv)
+	decrypted, err := stripPaddingPKCS7(string(decryptCBC(encrypted, block, iv)))
+	if err != nil {
+		panic(err)
+	}
+	if strings.Index(decrypted, ";admin=true;") != -1 {
+		fmt.Println("Learn to parse")
+	}
+	admin := makeAdmin(prefix, suffix, block, iv)
+	if strings.Index(admin, ";admin=true;") != -1 {
+		fmt.Println("Admin acquired")
+	} else {
+		fmt.Println("Not an admin")
+	}
+	fmt.Printf("%q\n", admin)
+}

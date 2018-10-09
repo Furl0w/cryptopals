@@ -304,3 +304,27 @@ func stripPaddingPKCS7(s string) (string, error) {
 	}
 	return s, err
 }
+
+func concatAndEncrypt(prefix string, userdata string, suffix string, block cipher.Block, IV []byte) []byte {
+	userdata = strings.Map(func(r rune) rune {
+		if r == rune('=') || r == rune(';') {
+			return -1
+		}
+		return r
+	}, userdata)
+	query := paddingPKCS7(prefix+userdata+suffix, block.BlockSize())
+	return encryptCBC([]byte(query), block, IV)
+}
+
+//comment1=cooking %20MCs;userdata= AAAAAAAAAAAAAAAAA AAAAAAadminAtrue ;comment2=%20like%20a%20pound%20of%20bacon
+//Flip 5 and 11 from third block, A to ; and A to =
+func makeAdmin(prefix string, suffix string, block cipher.Block, IV []byte) string {
+	encrypted := concatAndEncrypt(prefix, "AAAAAAAAAAAAAAAAAAAAAAadminAtrue", suffix, block, IV)
+	encrypted[block.BlockSize()*2+5] = encrypted[block.BlockSize()*2+5] ^ byte('A') ^ byte(';')
+	encrypted[block.BlockSize()*2+11] = encrypted[block.BlockSize()*2+11] ^ byte('A') ^ byte('=')
+	decrypted, err := stripPaddingPKCS7(string(decryptCBC(encrypted, block, IV)))
+	if err != nil {
+		panic(err)
+	}
+	return decrypted
+}
