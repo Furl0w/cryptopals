@@ -277,27 +277,25 @@ func stripNonPrintable(s string) string {
 }
 
 func stripPaddingPKCS7(s string) (string, error) {
-	p := false
 	i := len(s) - 1
-	padding := ""
-	for p == false {
-		if unicode.IsPrint(rune(s[i])) || rune(s[i]) == rune('\n') {
-			p = true
-		} else {
-			padding += string(s[i])
-		}
+	var padding []byte
+	padding = append(padding, s[i])
+	for {
 		i--
+		if s[i] == padding[0] {
+			padding = append(padding, s[i])
+		} else {
+			break
+		}
 	}
 	paddingValid := true
-	if len(padding) > 0 {
-		for i := 0; i < len(padding); i++ {
-			if padding[i] != byte(len(padding)) {
-				paddingValid = false
-				break
-			}
+	for i := 0; i < len(padding); i++ {
+		if padding[i] != byte(len(padding)) {
+			paddingValid = false
+			break
 		}
 	}
-	err := errors.New("Wrong encryption")
+	err := errors.New("Wrong padding")
 	if paddingValid == true {
 		s = s[:len(s)-len(padding)]
 		err = nil

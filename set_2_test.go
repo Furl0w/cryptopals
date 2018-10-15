@@ -146,21 +146,21 @@ func TestSet2_14(t *testing.T) {
 func TestSet2_15(t *testing.T) {
 	unpadded, err := stripPaddingPKCS7("ICE ICE BABY\x04\x04\x04\x04")
 	if err != nil {
-		fmt.Printf("Wrong padding for : %s\n", "ICE ICE BABY\x04\x04\x04\x04")
+		fmt.Printf("Wrong padding for : %q\n", "ICE ICE BABY\x04\x04\x04\x04")
 	} else {
-		fmt.Printf("Good padding : %s\n", unpadded)
+		fmt.Printf("Good padding : %q\n", unpadded)
 	}
 	unpadded2, err := stripPaddingPKCS7("ICE ICE BABY\x05\x05\x05\x05")
 	if err != nil {
 		fmt.Printf("Wrong padding : %q\n", "ICE ICE BABY\x05\x05\x05\x05")
 	} else {
-		fmt.Printf("Good padding : %s\n", unpadded2)
+		fmt.Printf("Good padding : %q\n", unpadded2)
 	}
 	unpadded3, err := stripPaddingPKCS7("ICE ICE BABY\x01\x02\x03\x04")
 	if err != nil {
 		fmt.Printf("Wrong padding : %q\n", "ICE ICE BABY\x01\x02\x03\x04")
 	} else {
-		fmt.Printf("Good padding : %s\n", unpadded3)
+		fmt.Printf("Good padding : %q\n", unpadded3)
 	}
 }
 
