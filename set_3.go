@@ -2,6 +2,7 @@ package cryptochallenges
 
 import (
 	"crypto/cipher"
+	"encoding/binary"
 )
 
 func createCipher(message []byte, block cipher.Block) ([]byte, []byte) {
@@ -50,9 +51,6 @@ func breakBlockPaddingOracle(prevBlock []byte, targetBlock []byte, IV []byte, bl
 			}
 			found := false
 			for b := lastSuccessfullBit[i]; b < 255; b++ {
-				/* if b == byte(i+1) {
-					continue
-				} */
 				inputBlock[len(inputBlock)-i-1] = prevBlock[len(inputBlock)-i-1] ^ b ^ byte(i+1)
 				cipher := make([]byte, len(targetBlock)*2)
 				copy(cipher, inputBlock)
@@ -79,4 +77,24 @@ func breakBlockPaddingOracle(prevBlock []byte, targetBlock []byte, IV []byte, bl
 		}
 	}
 	return decryptedBlock
+}
+
+func encryptCTR(message []byte, nonce []byte, block cipher.Block) []byte {
+	encrypted := make([]byte, len(message))
+	counter := make([]byte, 8)
+	keystream := make([]byte, block.BlockSize())
+	for i := 0; i < len(message); i++ {
+		if i%16 == 0 {
+			binary.LittleEndian.PutUint64(counter, uint64(i/16))
+			block.Encrypt(keystream, append(nonce, counter...))
+		}
+		encrypted[i] = message[i] ^ keystream[i%16]
+	}
+	return encrypted
+}
+
+func breakCTRRepeatingKey(texts []byte, lenKeystream int) []byte {
+	var keystream []byte
+	keystream = breakInBlocAndGetKey(texts, lenKeystream)
+	return keystream
 }
