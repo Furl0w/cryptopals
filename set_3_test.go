@@ -5,8 +5,10 @@ import (
 	"crypto/aes"
 	"encoding/base64"
 	"fmt"
+	mrand "math/rand"
 	"os"
 	"testing"
+	"time"
 )
 
 func TestSet3_17(t *testing.T) {
@@ -151,4 +153,24 @@ func TestSet3_20(t *testing.T) {
 	if err := scanner.Err(); err != nil {
 		fmt.Printf("ERROR : couldn't read the file at specified path\n")
 	}
+}
+
+func TestSet3_21(t *testing.T) {
+	seedMersenneTwister19937(45)
+	for i := 0; i < 10; i++ {
+		fmt.Println(extractNumberMersenneTwister19937())
+	}
+}
+
+func TestSet3_22(t *testing.T) {
+	r := mrand.New(mrand.NewSource(time.Now().UnixNano()))
+	wait := r.Intn(100-40) + 40
+	time.Sleep(time.Duration(wait) * time.Second)
+	seed := time.Now().Unix()
+	seedMersenneTwister19937(uint64(seed))
+	output := extractNumberMersenneTwister19937()
+	wait = r.Intn(100-40) + 40
+	time.Sleep(time.Duration(wait) * time.Second)
+	foundSeed := breakSeedMersenneTwister19937(time.Now().Unix(), output)
+	fmt.Printf("Seed was %d, found seed as %d\n", seed, foundSeed)
 }
