@@ -7,3 +7,6 @@ If you are looking for a clean solution of cryptopals in go I advice you to look
 
 09/10 : set 2 done, nothing too hard and no result broken this time.
 Go syntax is becoming cleaner but still a lot to work on. I left in comments the reasoning behind the inputs I used for the ECB cut-and-paste and CBC bitflipping.
+
+21/10 : set 3 done, good way to revise bitwise operations. I did rewrite the 2_15 when I realized I had it wrong and I needed it for the CBC padding oracle. I skipped the 3_19 mainly because it didn't teach anything (solving it statistically is 3_20) beside guessing. I might go back to finish it if I'm in the mood.
+Even though I didn't include it in the repo I validated my implementation of MT19937 against the native one in C++.

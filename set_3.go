@@ -1,9 +1,13 @@
 package cryptochallenges
 
 import (
+	"bytes"
 	"crypto/cipher"
 	"encoding/binary"
+	"errors"
+	"math"
 	"strconv"
+	"time"
 )
 
 func createCipher(message []byte, block cipher.Block) ([]byte, []byte) {
@@ -107,38 +111,36 @@ var d, _ = strconv.ParseUint("5555555555555555", 16, 64)
 var b, _ = strconv.ParseUint("71D67FFFEDA60000", 16, 64)
 var c, _ = strconv.ParseUint("FFF7EEE000000000", 16, 64)
 var u, s, t, l = uint64(29), uint64(17), uint64(37), uint64(43)
-var mT = make([]uint64, n)
-var index = n + 1
 var lowerMask = uint64((1 << r) - 1)
 var upperMask = ^lowerMask
 
-func seedMersenneTwister19937(seed uint64) {
-	index = n
+func seedMersenneTwister19937(mT []uint64, index *uint64, seed uint64) {
+	*index = n
 	mT[0] = seed
 	for i := uint64(1); i < (n - 1); i++ {
 		mT[i] = f*(mT[i-1]^(mT[i-1]>>(w-2))) + i
 	}
 }
 
-func extractNumberMersenneTwister19937() uint64 {
-	if index >= n {
-		if index > n {
+func extractNumberMersenneTwister19937(mT []uint64, index *uint64) uint64 {
+	if *index >= n {
+		if *index > n {
 			panic("MT19937 not seeded")
 		}
-		twistMersenneTwister19937()
+		twistMersenneTwister19937(mT, index)
 	}
 
-	y := mT[index]
+	y := mT[*index]
 	y ^= ((y >> u) & d)
 	y ^= ((y << s) & b)
 	y ^= ((y << t) & c)
 	y ^= (y >> l)
 
-	index = index + 1
+	*index = *index + 1
 	return y
 }
 
-func twistMersenneTwister19937() {
+func twistMersenneTwister19937(mT []uint64, index *uint64) {
 	for i := uint64(0); i < (n - 1); i++ {
 		x := mT[i]&upperMask + (mT[(i+1)%n] & lowerMask)
 		xA := x >> 1
@@ -147,17 +149,96 @@ func twistMersenneTwister19937() {
 		}
 		mT[i] = mT[(i+m)%n] ^ xA
 	}
-	index = 0
+	*index = 0
 }
 
-func breakSeedMersenneTwister19937(now int64, output uint64) uint64 {
+func breakSeedMersenneTwister19937(mT []uint64, index *uint64, now int64, output uint64) uint64 {
 	seed := uint64(now)
 	for {
 		seed--
-		seedMersenneTwister19937(seed)
-		testOutput := extractNumberMersenneTwister19937()
+		seedMersenneTwister19937(mT, index, seed)
+		testOutput := extractNumberMersenneTwister19937(mT, index)
 		if output == testOutput {
 			return seed
 		}
 	}
+}
+
+func invertState(extracted uint64) uint64 {
+	extracted ^= (extracted >> l)
+	extracted ^= ((extracted << t) & c)
+	for i := 0; i < 3; i++ {
+		extracted ^= ((extracted << s) & b)
+	}
+	extracted ^= ((extracted >> u) & d)
+	return extracted
+}
+
+func encryptMT19937(message []byte, seed uint16) []byte {
+	encrypted := make([]byte, len(message))
+	mT := make([]uint64, n)
+	index := n + 1
+	seedMersenneTwister19937(mT, &index, uint64(seed))
+	var keystream byte
+	for i := 0; i < len(message); i++ {
+		keystream = uint8(extractNumberMersenneTwister19937(mT, &index) ^ uint64(1<<56))
+		encrypted[i] = message[i] ^ keystream
+	}
+	return encrypted
+}
+
+func breakSeedFromCipher(cipher []byte, supplied []byte) (uint16, error) {
+	startIndex := len(cipher) - len(supplied)
+	attackerSuppliedCipher := cipher[startIndex:]
+	keystream := make([]uint8, len(supplied))
+	for i, n := range attackerSuppliedCipher {
+		keystream[i] = n ^ supplied[i]
+	}
+	for i := uint16(0); i < math.MaxUint16; i++ {
+		mT := make([]uint64, n)
+		index := n + 1
+		seedMersenneTwister19937(mT, &index, uint64(i))
+		testKeyStream := make([]uint8, len(supplied))
+		for j := 0; j < len(cipher); j++ {
+			if j >= startIndex {
+				testKeyStream[j-startIndex] = uint8(extractNumberMersenneTwister19937(mT, &index) ^ uint64(1<<56))
+			} else {
+				extractNumberMersenneTwister19937(mT, &index)
+			}
+		}
+		if bytes.Equal(keystream, testKeyStream) == true {
+			return i, nil
+		}
+	}
+	return 0, errors.New("Didn't find seed")
+}
+
+func createToken(key uint64) []byte {
+	lenToken := 16
+	token := make([]byte, lenToken)
+	mT := make([]uint64, n)
+	index := n + 1
+	seedMersenneTwister19937(mT, &index, key)
+	for i := 0; i < lenToken; i++ {
+		token[i] = uint8(extractNumberMersenneTwister19937(mT, &index) ^ uint64(1<<56))
+	}
+	return token
+}
+
+func detectTimeSeedingToken(token []byte) bool {
+	//Checking only for the last hour obviously we could check for more
+	startingTime := uint64(time.Now().Unix())
+	for i := uint64(0); i < 60*60; i++ {
+		mT := make([]uint64, n)
+		index := n + 1
+		seedMersenneTwister19937(mT, &index, startingTime-i)
+		testToken := make([]byte, len(token))
+		for i := 0; i < len(token); i++ {
+			testToken[i] = uint8(extractNumberMersenneTwister19937(mT, &index) ^ uint64(1<<56))
+		}
+		if bytes.Equal(token, testToken) == true {
+			return true
+		}
+	}
+	return false
 }
