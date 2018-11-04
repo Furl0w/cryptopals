@@ -1,6 +1,7 @@
 package cryptochallenges
 
 import (
+	"bytes"
 	"crypto/aes"
 	b64 "encoding/base64"
 	"fmt"
@@ -58,4 +59,58 @@ func TestSet4_26(t *testing.T) {
 
 func TestSet4_27(t *testing.T) {
 
+	prefix := "comment1=cooking%20MCs;userdata="
+	suffix := ";comment2=%20like%20a%20pound%20of%20bacon"
+	key := generateRandom(16)
+	iv := key
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		panic(err)
+	}
+	encrypted := concatAndEncrypt(prefix, "AAAAAAAAAAAAAAAA", suffix, block, iv)
+	copy(encrypted[block.BlockSize():], make([]byte, 16))
+	copy(encrypted[block.BlockSize()*2:], encrypted[:16])
+	decrypted := decryptCBC(encrypted, block, iv)
+	for _, n := range decrypted {
+		if rune(n) > 126 {
+			fmt.Println("High ascii found in decrypted")
+			break
+		}
+	}
+	recoveredKey := make([]byte, 16)
+	for i := 0; i < block.BlockSize(); i++ {
+		recoveredKey[i] = decrypted[i] ^ decrypted[i+2*block.BlockSize()]
+	}
+	if bytes.Compare(key, recoveredKey) != 0 {
+		fmt.Println("Wrong recovering key")
+	} else {
+		fmt.Println("key recovered")
+	}
+	fmt.Printf("key was %q\n", key)
+	fmt.Printf("recovered is %q\n", recoveredKey)
+}
+
+func TestSet4_28(t *testing.T) {
+	key := "YELLOW SUBMARINE"
+	message := "This is my message to authenticate"
+	sha1 := secretMac([]byte(key), []byte(message))
+	if checkMac([]byte(key), []byte(message), sha1) == false {
+		fmt.Println("Learn to implement")
+	}
+	fmt.Printf("%s\n", b64.StdEncoding.EncodeToString(sha1))
+}
+
+func TestSet4_29(t *testing.T) {
+	key := "Angstrom's"
+	message := "comment1=cooking%20MCs;userdata=foo;comment2=%20like%20a%20pound%20of%20bacon"
+	sha1 := secretMac([]byte(key), []byte(message))
+	IV := breakHashtoUint32(sha1)
+	messageToAdd := ";admin=true"
+	forgedMessage, hash := extendHash(IV, []byte(message), []byte(messageToAdd), []byte(key))
+	fmt.Printf("forged %s\n", b64.StdEncoding.EncodeToString(hash))
+	if strings.Index(string(forgedMessage), ";admin=true") != -1 {
+		fmt.Println("Admin acquired")
+	} else {
+		fmt.Println("Not an admin")
+	}
 }
