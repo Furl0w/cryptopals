@@ -16,7 +16,7 @@ func TestSet3_17(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	file, err := os.Open("17.txt")
+	file, err := os.Open("./src/17.txt")
 	if err != nil {
 		fmt.Printf("ERROR : couldn't open file at specified path\n")
 	}
@@ -66,7 +66,7 @@ func TestSet3_19(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	file, err := os.Open("19.txt")
+	file, err := os.Open("./src/19.txt")
 	if err != nil {
 		fmt.Printf("ERROR : couldn't open file at specified path\n")
 	}
@@ -96,7 +96,7 @@ func TestSet3_20(t *testing.T) {
 	if err != nil {
 		panic(err)
 	}
-	file, err := os.Open("20.txt")
+	file, err := os.Open("./src/20.txt")
 	if err != nil {
 		fmt.Printf("ERROR : couldn't open file at specified path\n")
 	}

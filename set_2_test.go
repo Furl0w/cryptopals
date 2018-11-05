@@ -29,7 +29,7 @@ func TestSet2_10_encryption(t *testing.T) {
 
 func TestSet2_10_CBC(t *testing.T) {
 	block, err := aes.NewCipher([]byte("YELLOW SUBMARINE"))
-	message, err := ioutil.ReadFile("10.txt")
+	message, err := ioutil.ReadFile("./src/10.txt")
 	if err != nil {
 		panic(err)
 	}
@@ -53,7 +53,7 @@ func TestSet2_11(t *testing.T) {
 }
 
 func TestSet2_12(t *testing.T) {
-	message, err := ioutil.ReadFile("12.txt")
+	message, err := ioutil.ReadFile("./src/12.txt")
 	if err != nil {
 		panic(err)
 	}
@@ -126,7 +126,7 @@ func TestSet2_13(t *testing.T) {
 	fmt.Printf("%q\n", encodeUser(adminUser))
 }
 func TestSet2_14(t *testing.T) {
-	message, err := ioutil.ReadFile("12.txt")
+	message, err := ioutil.ReadFile("./src/12.txt")
 	if err != nil {
 		panic(err)
 	}

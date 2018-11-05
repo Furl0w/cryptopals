@@ -40,7 +40,7 @@ func TestSet1_3(t *testing.T) {
 }
 
 func TestSet1_4(t *testing.T) {
-	res, err := SearchForEncryptedMessageFromFile("./4.txt")
+	res, err := SearchForEncryptedMessageFromFile("./src/4.txt")
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -65,14 +65,14 @@ func TestSet1_6_Hamming(t *testing.T) {
 }
 
 func TestSet1_6(t *testing.T) {
-	_, err := BreakRepeatingKeyXOR("6.txt")
+	_, err := BreakRepeatingKeyXOR("./src/6.txt")
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
 func TestSet1_7(t *testing.T) {
-	raw, err := ioutil.ReadFile("7.txt")
+	raw, err := ioutil.ReadFile("./src/7.txt")
 	if err != nil {
 		panic(err)
 	}
@@ -84,7 +84,7 @@ func TestSet1_7(t *testing.T) {
 
 func TestSet1_8(t *testing.T) {
 	var corpus [][]byte
-	file, err := os.Open("8.txt")
+	file, err := os.Open("./src/8.txt")
 	if err != nil {
 		panic(err)
 	}
