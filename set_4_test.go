@@ -22,7 +22,7 @@ func TestSet4_25(t *testing.T) {
 	fmt.Printf("%q\n\n", encryptCTR(edited, nonce, block))
 
 	//Breaking editing
-	plaintext, err := ioutil.ReadFile("25.txt")
+	plaintext, err := ioutil.ReadFile("./src/25.txt")
 	if err != nil {
 		panic(err)
 	}
@@ -113,4 +113,23 @@ func TestSet4_29(t *testing.T) {
 	} else {
 		fmt.Println("Not an admin")
 	}
+}
+
+func TestSet4_30(t *testing.T) {
+	key := "Angstrom's"
+	message := "comment1=cooking%20MCs;userdata=foo;comment2=%20like%20a%20pound%20of%20bacon"
+	md4 := secretMacMD4([]byte(key), []byte(message))
+	IV := breakHashtoUint32MD4(md4)
+	messageToAdd := ";admin=true"
+	forgedMessage, hash := extendHashMD4(IV, []byte(message), []byte(messageToAdd), []byte(key))
+	fmt.Printf("forged %s\n", b64.StdEncoding.EncodeToString(hash))
+	if strings.Index(string(forgedMessage), ";admin=true") != -1 {
+		fmt.Println("Admin acquired")
+	} else {
+		fmt.Println("Not an admin")
+	}
+}
+
+func TestSet4_31(t *testing.T) {
+
 }

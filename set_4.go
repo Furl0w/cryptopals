@@ -293,7 +293,7 @@ func createMDpadding(message []byte) []byte {
 
 func breakHashtoUint32(hash []byte) []uint32 {
 	var u []uint32
-	for i := 0; i < 20; i = i + 4 {
+	for i := 0; i < len(hash); i = i + 4 {
 		tmp := []byte{hash[i], hash[i+1], hash[i+2], hash[i+3]}
 		u = append(u, binary.BigEndian.Uint32(tmp))
 	}
@@ -314,6 +314,246 @@ func extendHash(IV []uint32, message []byte, messageToAdd []byte, key []byte) ([
 		d.Write(messageToAdd)
 		hash := d.checkSum()
 		if checkMac(key, forgedMessage, hash[:]) == true {
+			return forgedMessage, hash[:]
+		}
+		i++
+		if i > 16 {
+			panic("i too big we failed")
+		}
+	}
+}
+
+//Implementation of MD4 from crypto library
+
+const md4size = 16
+
+const md4blockSize = 64
+
+const (
+	_Chunk = 64
+	_Init0 = 0x67452301
+	_Init1 = 0xEFCDAB89
+	_Init2 = 0x98BADCFE
+	_Init3 = 0x10325476
+)
+
+type md4 struct {
+	s   [4]uint32
+	x   [_Chunk]byte
+	nx  int
+	len uint64
+}
+
+func (d *md4) Reset() {
+	d.s[0] = _Init0
+	d.s[1] = _Init1
+	d.s[2] = _Init2
+	d.s[3] = _Init3
+	d.nx = 0
+	d.len = 0
+}
+
+//For length extension attack
+func (d *md4) ResetCustom(IV []uint32) {
+	d.s[0] = IV[0]
+	d.s[1] = IV[1]
+	d.s[2] = IV[2]
+	d.s[3] = IV[3]
+	d.nx = 0
+	d.len = 0
+}
+
+func newMD4() *md4 {
+	d := new(md4)
+	d.Reset()
+	return d
+}
+
+func (d *md4) Size() int { return md4size }
+
+func (d *md4) BlockSize() int { return md4blockSize }
+
+func (d *md4) Write(p []byte) (nn int, err error) {
+	nn = len(p)
+	d.len += uint64(nn)
+	if d.nx > 0 {
+		n := len(p)
+		if n > _Chunk-d.nx {
+			n = _Chunk - d.nx
+		}
+		for i := 0; i < n; i++ {
+			d.x[d.nx+i] = p[i]
+		}
+		d.nx += n
+		if d.nx == _Chunk {
+			_Block(d, d.x[0:])
+			d.nx = 0
+		}
+		p = p[n:]
+	}
+	n := _Block(d, p)
+	p = p[n:]
+	if len(p) > 0 {
+		d.nx = copy(d.x[:], p)
+	}
+	return
+}
+
+func (d0 *md4) Sum(in []byte) []byte {
+	d := new(md4)
+	*d = *d0
+
+	len := d.len
+	var tmp [64]byte
+	tmp[0] = 0x80
+	if len%64 < 56 {
+		d.Write(tmp[0 : 56-len%64])
+	} else {
+		d.Write(tmp[0 : 64+56-len%64])
+	}
+	len <<= 3
+	for i := uint(0); i < 8; i++ {
+		tmp[i] = byte(len >> (8 * i))
+	}
+	d.Write(tmp[0:8])
+
+	if d.nx != 0 {
+		panic("d.nx != 0")
+	}
+
+	for _, s := range d.s {
+		in = append(in, byte(s>>0))
+		in = append(in, byte(s>>8))
+		in = append(in, byte(s>>16))
+		in = append(in, byte(s>>24))
+	}
+	return in
+}
+
+var shift1 = []uint{3, 7, 11, 19}
+var shift2 = []uint{3, 5, 9, 13}
+var shift3 = []uint{3, 9, 11, 15}
+
+var xIndex2 = []uint{0, 4, 8, 12, 1, 5, 9, 13, 2, 6, 10, 14, 3, 7, 11, 15}
+var xIndex3 = []uint{0, 8, 4, 12, 2, 10, 6, 14, 1, 9, 5, 13, 3, 11, 7, 15}
+
+func _Block(dig *md4, p []byte) int {
+	a := dig.s[0]
+	b := dig.s[1]
+	c := dig.s[2]
+	d := dig.s[3]
+	n := 0
+	var X [16]uint32
+	for len(p) >= _Chunk {
+		aa, bb, cc, dd := a, b, c, d
+
+		j := 0
+		for i := 0; i < 16; i++ {
+			X[i] = uint32(p[j]) | uint32(p[j+1])<<8 | uint32(p[j+2])<<16 | uint32(p[j+3])<<24
+			j += 4
+		}
+		for i := uint(0); i < 16; i++ {
+			x := i
+			s := shift1[i%4]
+			f := ((c ^ d) & b) ^ d
+			a += f + X[x]
+			a = a<<s | a>>(32-s)
+			a, b, c, d = d, a, b, c
+		}
+
+		for i := uint(0); i < 16; i++ {
+			x := xIndex2[i]
+			s := shift2[i%4]
+			g := (b & c) | (b & d) | (c & d)
+			a += g + X[x] + 0x5a827999
+			a = a<<s | a>>(32-s)
+			a, b, c, d = d, a, b, c
+		}
+
+		for i := uint(0); i < 16; i++ {
+			x := xIndex3[i]
+			s := shift3[i%4]
+			h := b ^ c ^ d
+			a += h + X[x] + 0x6ed9eba1
+			a = a<<s | a>>(32-s)
+			a, b, c, d = d, a, b, c
+		}
+
+		a += aa
+		b += bb
+		c += cc
+		d += dd
+
+		p = p[_Chunk:]
+		n += _Chunk
+	}
+
+	dig.s[0] = a
+	dig.s[1] = b
+	dig.s[2] = c
+	dig.s[3] = d
+	return n
+}
+
+//End of md4 implementation
+
+func secretMacMD4(key []byte, message []byte) []byte {
+	s := newMD4()
+	s.Write(key)
+	s.Write(message)
+	hash := s.Sum(nil)
+	return hash[:]
+}
+
+func checkMacMD4(key []byte, message []byte, mac []byte) bool {
+	s := newMD4()
+	s.Write(key)
+	s.Write(message)
+	hash := s.Sum(nil)
+	return bytes.Equal(hash[:], mac)
+}
+
+func createMD4padding(message []byte) []byte {
+	len := len(message)
+	var padding []byte
+	var tmp [64]byte
+	tmp[0] = 0x80
+	if len%64 < 56 {
+		padding = append(padding, tmp[0:56-len%64]...)
+	} else {
+		padding = append(padding, tmp[0:64+56-len%64]...)
+	}
+	len <<= 3
+	for i := uint(0); i < 8; i++ {
+		tmp[i] = byte(len >> (8 * i))
+	}
+	padding = append(padding, tmp[0:8]...)
+	return padding
+}
+
+func breakHashtoUint32MD4(hash []byte) []uint32 {
+	var u []uint32
+	for i := 0; i < len(hash); i = i + 4 {
+		tmp := []byte{hash[i], hash[i+1], hash[i+2], hash[i+3]}
+		u = append(u, binary.LittleEndian.Uint32(tmp))
+	}
+	return u
+}
+
+func extendHashMD4(IV []uint32, message []byte, messageToAdd []byte, key []byte) ([]byte, []byte) {
+	i := 0
+	for {
+		d := new(md4)
+		d.ResetCustom(IV)
+		var forgedMessage []byte
+		forgedMessage = append(forgedMessage, message...)
+		padding := createMD4padding(append(forgedMessage, []byte(strings.Repeat("A", 10))...))
+		forgedMessage = append(forgedMessage, padding...)
+		d.len = uint64(len(forgedMessage) + 10)
+		forgedMessage = append(forgedMessage, messageToAdd...)
+		d.Write(messageToAdd)
+		hash := d.Sum(nil)
+		if checkMacMD4(key, forgedMessage, hash[:]) == true {
 			return forgedMessage, hash[:]
 		}
 		i++
