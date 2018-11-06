@@ -6,11 +6,8 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io/ioutil"
-	"log"
-	"net/http"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestSet4_25(t *testing.T) {
@@ -134,53 +131,5 @@ func TestSet4_30(t *testing.T) {
 }
 
 func TestSet4_32(t *testing.T) {
-	signature := make([]byte, sha1Size)
-	request := "http://localhost:8080/test?file=foo&&signature="
-	times := make([]int64, 255)
-	for i := 0; i < sha1Size; i++ {
-		for j := byte(0); j < 255; j++ {
-			signature[i] = j
-			if i != sha1Size-1 {
-				start := time.Now()
-				for k := 0; k < 10; k++ {
-					response, err := http.Get(request + sanitizeByteArray(signature))
-					if err != nil {
-						log.Fatal(err)
-					}
-					response.Body.Close()
-				}
-				times[j] = time.Since(start).Nanoseconds()
-			} else {
-				response, err := http.Get(request + sanitizeByteArray(signature))
-				if err != nil {
-					log.Fatal(err)
-				}
-				if response.StatusCode == 200 {
-					fmt.Printf("Signature %q\n", signature)
-					fmt.Println("Timing leak exploited successfully")
-					return
-				}
-				response.Body.Close()
-			}
-			fmt.Printf("\rBreaking hash %q", signature)
-		}
-		var n int64
-		var biggest int
-		for l, v := range times {
-			if v > n {
-				n = v
-				biggest = l
-			}
-		}
-		signature[i] = byte(biggest)
-		fmt.Printf("\rBreaking hash %q", signature)
-	}
-}
-
-func sanitizeByteArray(value []byte) string {
-	sanitized := base64.StdEncoding.EncodeToString(value)
-	sanitized = strings.Replace(sanitized, "+", "-", -1)
-	sanitized = strings.Replace(sanitized, "/", "_", -1)
-	sanitized = strings.Replace(sanitized, "=", "", -1)
-	return sanitized
+	exploitLeak()
 }

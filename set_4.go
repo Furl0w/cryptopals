@@ -3,8 +3,13 @@ package cryptochallenges
 import (
 	"bytes"
 	"crypto/cipher"
+	"encoding/base64"
 	"encoding/binary"
+	"fmt"
+	"log"
+	"net/http"
 	"strings"
+	"time"
 )
 
 func seekAndAppendNewtext(ciphertext []byte, nonce []byte, block cipher.Block, offset int, newtext []byte) []byte {
@@ -561,4 +566,56 @@ func extendHashMD4(IV []uint32, message []byte, messageToAdd []byte, key []byte)
 			panic("i too big we failed")
 		}
 	}
+}
+
+func exploitLeak() {
+	signature := make([]byte, sha1Size)
+	request := "http://localhost:8080/test?file=foo&&signature="
+	times := make([]int64, 255)
+	for i := 0; i < sha1Size; i++ {
+		for j := byte(0); j < 255; j++ {
+			signature[i] = j
+			if i != sha1Size-1 {
+				start := time.Now()
+				for k := 0; k < 10; k++ {
+					response, err := http.Get(request + sanitizeByteArray(signature))
+					if err != nil {
+						log.Fatal(err)
+					}
+					response.Body.Close()
+				}
+				times[j] = time.Since(start).Nanoseconds()
+			} else {
+				response, err := http.Get(request + sanitizeByteArray(signature))
+				if err != nil {
+					log.Fatal(err)
+				}
+				if response.StatusCode == 200 {
+					fmt.Printf("Signature %q\n", signature)
+					fmt.Println("Timing leak exploited successfully")
+					return
+				}
+				response.Body.Close()
+			}
+			fmt.Printf("\rBreaking hash %q", signature)
+		}
+		var n int64
+		var biggest int
+		for l, v := range times {
+			if v > n {
+				n = v
+				biggest = l
+			}
+		}
+		signature[i] = byte(biggest)
+		fmt.Printf("\rBreaking hash %q", signature)
+	}
+}
+
+func sanitizeByteArray(value []byte) string {
+	sanitized := base64.StdEncoding.EncodeToString(value)
+	sanitized = strings.Replace(sanitized, "+", "-", -1)
+	sanitized = strings.Replace(sanitized, "/", "_", -1)
+	sanitized = strings.Replace(sanitized, "=", "", -1)
+	return sanitized
 }
