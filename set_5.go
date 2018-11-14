@@ -1,10 +1,14 @@
 package cryptochallenges
 
 import (
+	"bytes"
 	"crypto"
 	"crypto/aes"
+	"crypto/hmac"
 	"crypto/rand"
+	"crypto/sha256"
 	"fmt"
+	"math"
 	"math/big"
 )
 
@@ -22,7 +26,8 @@ func deriveKey(priv *big.Int, pub *big.Int) []byte {
 	var s big.Int
 	s.Exp(pub, priv, p)
 	sha256 := crypto.SHA256.New()
-	return sha256.Sum(s.Bytes())
+	sha256.Write(s.Bytes())
+	return sha256.Sum(nil)
 }
 
 func sendMessageMITM(keyA []byte, keyB []byte, keyM []byte, message string) {
@@ -40,7 +45,7 @@ func sendMessageMITM(keyA []byte, keyB []byte, keyM []byte, message string) {
 	if err != nil {
 		fmt.Println(err)
 	}
-	decryptedM := decryptCBC(toSendA[16:], blockM, toSendA[:16])
+	decryptedM, _ := stripPaddingPKCS7(string(decryptCBC(toSendA[16:], blockM, toSendA[:16])))
 	fmt.Printf("decrypted %s\n", decryptedM)
 	fmt.Println("M re-encrypting and sending to B")
 	encryptedM := encryptCBC([]byte(message), blockM, toSendA[:16])
@@ -50,6 +55,171 @@ func sendMessageMITM(keyA []byte, keyB []byte, keyM []byte, message string) {
 	if err != nil {
 		fmt.Println(err)
 	}
-	decryptedB := decryptCBC(toSendM[16:], blockB, toSendM[:16])
+	decryptedB, _ := stripPaddingPKCS7(string(decryptCBC(toSendM[16:], blockB, toSendM[:16])))
 	fmt.Printf("decrypted %s\n", decryptedB)
+}
+
+func pubKeyNegociatedGroup(priv *big.Int, negG *big.Int) *big.Int {
+	priv.Mod(priv, p)
+	pub := big.NewInt(0)
+	pub.Exp(negG, priv, p)
+	return pub
+}
+
+/*
+Parameters for SRP
+g and p will be used for group and NIST prime
+*/
+
+var k = big.NewInt(3)
+var email = "foo.bar@baz.com"
+var pwd = "lololol"
+
+func hashToInteger(h []byte) *big.Int {
+	return new(big.Int).SetBytes(h)
+}
+
+func genServer() (*big.Int, *big.Int) {
+	salt, err := rand.Int(rand.Reader, big.NewInt(math.MaxInt64))
+	if err != nil {
+		fmt.Println(err)
+	}
+	sha256 := crypto.SHA256.New()
+	sha256.Write(salt.Bytes())
+	sha256.Write([]byte(pwd))
+	xH := sha256.Sum(nil)
+	x := hashToInteger(xH)
+	v := big.NewInt(0).Exp(g, x, p)
+	return salt, v
+}
+
+func srpHandshake(salt *big.Int, v *big.Int, a *big.Int, b *big.Int) bool {
+	//Client ->
+	A := big.NewInt(0).Exp(g, a, p)
+
+	//Server ->
+	B := big.NewInt(0).Mul(k, v)
+	B.Add(B, big.NewInt(0).Exp(g, b, p))
+
+	//Both
+	sha256 := crypto.SHA256.New()
+	sha256.Write(A.Bytes())
+	sha256.Write(B.Bytes())
+	u := hashToInteger(sha256.Sum(nil))
+
+	//Client ->
+	SClient := computeSClient([]byte(pwd), salt.Bytes(), B, a, u)
+	sha256.Reset()
+	sha256.Write(SClient.Bytes())
+	KClient := sha256.Sum(nil)
+
+	//Server ->
+	SServer := computeSServer(A, v, u, b)
+	sha256.Reset()
+	sha256.Write(SServer.Bytes())
+	KServer := sha256.Sum(nil)
+	if bytes.Compare(computeHMAC(KClient, salt.Bytes()), computeHMAC(KServer, salt.Bytes())) == 0 {
+		return true
+	}
+	return false
+}
+
+func computeSClient(pwd []byte, salt []byte, B *big.Int, a *big.Int, u *big.Int) *big.Int {
+	sha256 := crypto.SHA256.New()
+	sha256.Write(salt)
+	sha256.Write([]byte(pwd))
+	xH := sha256.Sum(nil)
+	x := hashToInteger(xH)
+	SClient := big.NewInt(0).Mul(k, big.NewInt(0).Exp(g, x, p))
+	SClient.Sub(B, SClient)
+	return SClient.Exp(SClient, a.Add(a, big.NewInt(0).Mul(u, x)), p)
+}
+
+func computeSServer(A *big.Int, v *big.Int, u *big.Int, b *big.Int) *big.Int {
+	SServer := big.NewInt(0).Mul(A, big.NewInt(0).Exp(v, u, p))
+	return SServer.Exp(SServer, b, p)
+}
+
+func computeHMAC(K []byte, salt []byte) []byte {
+	h := hmac.New(sha256.New, K)
+	h.Write(salt)
+	return h.Sum(nil)
+}
+
+func srpHandshakeRogueParam(salt *big.Int, v *big.Int, A *big.Int, b *big.Int) bool {
+
+	//Server
+	B := big.NewInt(0).Mul(k, v)
+	B.Add(B, big.NewInt(0).Exp(g, b, p))
+	sha256 := crypto.SHA256.New()
+	sha256.Write(A.Bytes())
+	sha256.Write(B.Bytes())
+	u := hashToInteger(sha256.Sum(nil))
+
+	//Client (doesn't need the pwd)
+	SClient := big.NewInt(0)
+	sha256.Reset()
+	sha256.Write(SClient.Bytes())
+	KClient := sha256.Sum(nil)
+
+	//Server ->
+	SServer := computeSServer(A, v, u, b)
+	sha256.Reset()
+	sha256.Write(SServer.Bytes())
+	KServer := sha256.Sum(nil)
+
+	if bytes.Compare(computeHMAC(KClient, salt.Bytes()), computeHMAC(KServer, salt.Bytes())) == 0 {
+		return true
+	}
+	return false
+}
+
+func simplifiedSRPHandshakeMITM(pwd []byte) ([]byte, *big.Int, *big.Int, *big.Int, *big.Int) {
+	//MITM init
+	salt, _ := genServer()
+
+	//Client ->
+	a, _ := rand.Int(rand.Reader, big.NewInt(math.MaxInt64))
+	A := computePublicKey(a)
+
+	//MITM ->
+	b, _ := rand.Int(rand.Reader, big.NewInt(math.MaxInt64))
+	B := computePublicKey(b)
+	byteU := make([]byte, 8)
+	rand.Read(byteU)
+	u := new(big.Int).SetBytes(byteU)
+
+	//Client ->
+	s256 := crypto.SHA256.New()
+	s256.Write(salt.Bytes())
+	s256.Write(pwd)
+	xH := s256.Sum(nil)
+	x := hashToInteger(xH)
+	SClient := big.NewInt(0).Exp(B, big.NewInt(0).Add(a, big.NewInt(0).Mul(u, x)), p)
+	s256.Reset()
+	s256.Write(SClient.Bytes())
+	K := s256.Sum(nil)
+	hmac256 := hmac.New(sha256.New, K)
+	hmac256.Write(salt.Bytes())
+	return hmac256.Sum(nil), salt, A, b, u
+}
+
+func tryPwd(mac []byte, pwd []byte, salt *big.Int, A *big.Int, b *big.Int, u *big.Int) bool {
+	B := computePublicKey(b)
+	s256 := crypto.SHA256.New()
+	s256.Write(salt.Bytes())
+	s256.Write(pwd)
+	xH := s256.Sum(nil)
+	x := hashToInteger(xH)
+	S := big.NewInt(0).Mul(big.NewInt(0).Exp(A, b, p), big.NewInt(0).Exp(B, big.NewInt(0).Mul(u, x), p))
+	S.Mod(S, p)
+	s256.Reset()
+	s256.Write(S.Bytes())
+	K := s256.Sum(nil)
+	hmac256 := hmac.New(sha256.New, K)
+	hmac256.Write(salt.Bytes())
+	if bytes.Compare(hmac256.Sum(nil), mac) == 0 {
+		return true
+	}
+	return false
 }
